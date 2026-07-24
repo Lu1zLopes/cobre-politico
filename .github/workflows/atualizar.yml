@@ -1,0 +1,34 @@
+name: Atualizar contatos parlamentares
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Escrever credenciais do Google
+        run: echo '${{ secrets.GOOGLE_CREDS }}' > credenciais.json
+
+      - name: Rodar coleta e atualizar planilha
+        env:
+          GOOGLE_CREDS_PATH: credenciais.json
+          NOME_PLANILHA: "Cobre Seu Político - Contatos"
+        run: python atualizar_contatos.py
+
+      - name: Limpar credenciais
+        if: always()
+        run: rm -f credenciais.json

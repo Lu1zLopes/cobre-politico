@@ -1,34 +1,47 @@
+# .github/workflows/atualizar.yml
+# Coleta os contatos, atualiza a planilha e republica o painel do site.
+
 name: Atualizar contatos parlamentares
 
 on:
   schedule:
-    - cron: "0 9 * * 1"
-  workflow_dispatch:
+    - cron: "0 9 * * 1"        # toda segunda, 09:00 UTC (06:00 em Brasília)
+  workflow_dispatch:            # permite rodar na mão pela aba Actions
+
+permissions:
+  contents: write               # necessário para o passo que publica o index.html
 
 jobs:
   atualizar:
     runs-on: ubuntu-latest
     steps:
-      - name: Baixar o código
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configurar Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
 
       - name: Instalar dependências
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt gspread google-auth
 
-      - name: Escrever credenciais do Google
-        run: echo '${{ secrets.GOOGLE_CREDS }}' > credenciais.json
-
-      - name: Rodar coleta e atualizar planilha
+      # 1) seu script atual: coleta as APIs e grava na planilha
+      - name: Coletar contatos
         env:
-          GOOGLE_CREDS_PATH: credenciais.json
-          NOME_PLANILHA: "Cobre Seu Político - Contatos"
+          GOOGLE_CREDS: ${{ secrets.GOOGLE_CREDS }}
         run: python atualizar_contatos.py
 
-      - name: Limpar credenciais
-        if: always()
-        run: rm -f credenciais.json
+      # 2) lê a planilha recém-atualizada e reconstrói o painel
+      - name: Gerar painel
+        env:
+          GOOGLE_CREDS: ${{ secrets.GOOGLE_CREDS }}
+        run: python gerar_dashboard.py --sheet "Cobre Seu Político - Contatos" -o index.html
+
+      # 3) publica o painel novo (o GitHub Pages recarrega sozinho)
+      - name: Publicar painel
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --staged --quiet && echo "Nada mudou." && exit 0
+          git commit -m "Atualiza painel de contatos"
+          git push
